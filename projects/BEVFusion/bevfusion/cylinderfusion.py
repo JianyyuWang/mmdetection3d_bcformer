@@ -17,7 +17,7 @@ from .ops import Voxelization
 
 
 @MODELS.register_module()
-class BEVFusion(Base3DDetector):
+class CylinderFusion(Base3DDetector):
 
     def __init__(
         self,
@@ -151,7 +151,6 @@ class BEVFusion(Base3DDetector):
         x = x.view(B, int(BN / B), C, H, W)
 
         with torch.cuda.amp.autocast(device_type='cuda', dtype=torch.float32):
-        # with torch.cuda.amp.autocast():
             x = self.view_transform(
                 x,
                 points,

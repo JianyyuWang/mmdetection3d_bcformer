@@ -25,17 +25,20 @@ data_prefix = dict(
 input_modality = dict(use_lidar=True, use_camera=False)
 
 model = dict(
-    type='Cylinder3D',
+    type='CylinderFusion',
     data_preprocessor=dict(
         type='Det3DDataPreprocessor',
-        voxel=True,
-        voxel_type='cylindrical',
-        voxel_layer=dict(
-            grid_shape=grid_shape,
-            point_cloud_range=point_cloud_range,
-            max_num_points=-1,
-            max_voxels=-1,
-        ),
+        pad_size_divisor=32,
+        voxelize_cfg=dict(
+            voxel=True,
+            voxel_type='cylindrical',
+            voxel_layer=dict(
+                grid_shape=grid_shape,
+                point_cloud_range=point_cloud_range,
+                max_num_points=-1,
+                max_voxels=-1,
+            ),
+        )
     ),
     voxel_encoder=dict(
         type='SegVFE',
