@@ -121,8 +121,6 @@ mmdet3d/.mim
 
 # Pytorch
 *.pth
-*.pt
-*.pt
 
 # demo
 *.jpg
