@@ -52,7 +52,7 @@ model = dict(
             voxel_size=[0.075, 0.075, 0.2],
             max_voxels=[120000, 160000],
             voxelize_reduce=True)),
-    pts_voxel_encoder=dict(type='HardSimpleVFE', num_features=5),
+    pts_voxel_encoder=dict(type='HardSimpleVFE', num_features=5),  # bevfusion didnt use this encoder
     pts_middle_encoder=dict(
         type='BEVFusionSparseEncoder',
         in_channels=5,
@@ -382,3 +382,5 @@ default_hooks = dict(
     logger=dict(type='LoggerHook', interval=50),
     checkpoint=dict(type='CheckpointHook', interval=5))
 custom_hooks = [dict(type='DisableObjectSampleHook', disable_after_epoch=15)]
+
+resume = ".work_dirs/bevfusion_lidar_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d/epoch_10.pth"

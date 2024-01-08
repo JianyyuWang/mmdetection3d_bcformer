@@ -14,6 +14,7 @@ from mmdet3d.registry import MODELS
 from mmdet3d.structures import Det3DDataSample
 from mmdet3d.utils import OptConfigType, OptMultiConfig, OptSampleList
 from .ops import Voxelization
+from mmdet3d.models.data_preprocessors.voxelize import VoxelizationByGridShape
 
 
 @MODELS.register_module()
@@ -35,12 +36,12 @@ class CylinderFusion(Base3DDetector):
         seg_head: Optional[dict] = None,
         **kwargs,
     ) -> None:
-        voxelize_cfg = data_preprocessor.pop('voxelize_cfg')
+        # voxelize_cfg = data_preprocessor.pop('voxelize_cfg')
         super().__init__(
             data_preprocessor=data_preprocessor, init_cfg=init_cfg)
 
-        self.voxelize_reduce = voxelize_cfg.pop('voxelize_reduce')
-        self.pts_voxel_layer = Voxelization(**voxelize_cfg)
+        # self.voxelize_reduce = voxelize_cfg.pop('voxelize_reduce')
+        # self.pts_voxel_layer = VoxelizationByGridShape(**voxelize_cfg)
 
         self.pts_voxel_encoder = MODELS.build(pts_voxel_encoder)
 
@@ -164,40 +165,43 @@ class CylinderFusion(Base3DDetector):
         return x
 
     def extract_pts_feat(self, batch_inputs_dict) -> torch.Tensor:
-        points = batch_inputs_dict['points']
-        # with torch.cuda.amp.autocast('cuda', enabled=False):
+        # points = batch_inputs_dict['points']
         with torch.cuda.amp.autocast(enabled=False):
-            points = [point.float() for point in points]
-            feats, coords, sizes = self.voxelize(points)
-            batch_size = coords[-1, 0] + 1
-        x = self.pts_middle_encoder(feats, coords, batch_size)
+            encoded_feats = self.pts_voxel_encoder(batch_inputs_dict['voxels']['voxels'],
+                                            batch_inputs_dict['voxels']['coors'])
+        batch_inputs_dict['voxels']['voxel_coors'] = encoded_feats[1]
+        x = self.pts_middle_encoder(encoded_feats[0], encoded_feats[1],len(batch_inputs_dict['points']))
+        # x = self.pts_middle_encoder(feats, coords, batch_size)
         return x
 
-    @torch.no_grad()
-    def voxelize(self, points):
+    # @torch.no_grad()
+    # def voxelize(self, points):
         feats, coords, sizes = [], [], []
-        for k, res in enumerate(points):
-            ret = self.pts_voxel_layer(res)
-            if len(ret) == 3:
-                # hard voxelize
-                f, c, n = ret
-            else:
-                assert len(ret) == 2
-                f, c = ret
-                n = None
-            feats.append(f)
-            coords.append(F.pad(c, (1, 0), mode='constant', value=k))
-            if n is not None:
-                sizes.append(n)
+        if self.pts_voxel_layer.voxel_type == 'cylindrical':
+            pass
+        else:
+            for k, res in enumerate(points):
+                ret = self.pts_voxel_layer(res)
+                if len(ret) == 3:
+                    # hard voxelize
+                    f, c, n = ret
+                else:
+                    assert len(ret) == 2
+                    f, c = ret
+                    n = None
+                feats.append(f)
+                coords.append(F.pad(c, (1, 0), mode='constant', value=k))
+                if n is not None:
+                    sizes.append(n)
 
-        feats = torch.cat(feats, dim=0)
-        coords = torch.cat(coords, dim=0)
-        if len(sizes) > 0:
-            sizes = torch.cat(sizes, dim=0)
-            if self.voxelize_reduce:
-                feats = feats.sum(
-                    dim=1, keepdim=False) / sizes.type_as(feats).view(-1, 1)
-                feats = feats.contiguous()
+            feats = torch.cat(feats, dim=0)
+            coords = torch.cat(coords, dim=0)
+            if len(sizes) > 0:
+                sizes = torch.cat(sizes, dim=0)
+                if self.voxelize_reduce:
+                    feats = feats.sum(
+                        dim=1, keepdim=False) / sizes.type_as(feats).view(-1, 1)
+                    feats = feats.contiguous()
 
         return feats, coords, sizes
 

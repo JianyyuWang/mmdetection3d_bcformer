@@ -15,12 +15,12 @@ from torch.nn import functional as F
 from mmdet3d.registry import MODELS
 from mmdet3d.structures.det3d_data_sample import SampleList
 from mmdet3d.utils import OptConfigType
-from .utils import multiview_img_stack_batch
-from .voxelize import VoxelizationByGridShape, dynamic_scatter_3d
+from mmdet3d.models.data_preprocessors.utils import multiview_img_stack_batch
+from mmdet3d.models.data_preprocessors.voxelize import VoxelizationByGridShape, dynamic_scatter_3d
 
 
 @MODELS.register_module()
-class Det3DDataPreprocessor(DetDataPreprocessor):
+class Det3DDataPreprocessor_cylinder_fusion(DetDataPreprocessor):
     """Points / Image pre-processor for point clouds / vision-only / multi-
     modality 3D detection tasks.
 
@@ -102,7 +102,7 @@ class Det3DDataPreprocessor(DetDataPreprocessor):
                  boxtype2tensor: bool = True,
                  non_blocking: bool = False,
                  batch_augments: Optional[List[dict]] = None) -> None:
-        super(Det3DDataPreprocessor, self).__init__(
+        super(Det3DDataPreprocessor_cylinder_fusion, self).__init__(
             mean=mean,
             std=std,
             pad_size_divisor=pad_size_divisor,
@@ -477,19 +477,19 @@ class Det3DDataPreprocessor(DetDataPreprocessor):
                 every samples. Add voxel-wise annotation forsegmentation.
         """
 
-        if self.training:
-            pts_semantic_mask = data_sample.gt_pts_seg.pts_semantic_mask
-            voxel_semantic_mask, _, point2voxel_map = dynamic_scatter_3d(
-                F.one_hot(pts_semantic_mask.long()).float(), res_coors, 'mean',
-                True)
-            voxel_semantic_mask = torch.argmax(voxel_semantic_mask, dim=-1)
-            data_sample.gt_pts_seg.voxel_semantic_mask = voxel_semantic_mask
-            data_sample.point2voxel_map = point2voxel_map
-        else:
-            pseudo_tensor = res_coors.new_ones([res_coors.shape[0], 1]).float()
-            _, _, point2voxel_map = dynamic_scatter_3d(pseudo_tensor,
-                                                       res_coors, 'mean', True)
-            data_sample.point2voxel_map = point2voxel_map
+        # if self.training:
+        #     pts_semantic_mask = data_sample.gt_pts_seg.pts_semantic_mask
+        #     voxel_semantic_mask, _, point2voxel_map = dynamic_scatter_3d(
+        #         F.one_hot(pts_semantic_mask.long()).float(), res_coors, 'mean',
+        #         True)
+        #     voxel_semantic_mask = torch.argmax(voxel_semantic_mask, dim=-1)
+        #     data_sample.gt_pts_seg.voxel_semantic_mask = voxel_semantic_mask
+        #     data_sample.point2voxel_map = point2voxel_map
+        # else:
+        pseudo_tensor = res_coors.new_ones([res_coors.shape[0], 1]).float()
+        _, _, point2voxel_map = dynamic_scatter_3d(pseudo_tensor,
+                                                    res_coors, 'mean', True)
+        data_sample.point2voxel_map = point2voxel_map
 
     def ravel_hash(self, x: np.ndarray) -> np.ndarray:
         """Get voxel coordinates hash for np.unique.
