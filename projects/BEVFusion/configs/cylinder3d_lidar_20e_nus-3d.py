@@ -3,6 +3,9 @@ _base_ = ['../../../configs/_base_/default_runtime.py']
 custom_imports = dict(
     imports=['projects.BEVFusion.bevfusion','projects.BEVFusion.model'], allow_failed_imports=False)
 
+#    attendtion , in Det3DDataPreprocessor_cylinder_fusion and SegVFEDet
+# we use voxel_size = (point_cloud_range[3:] - point_cloud_range[:3]) / grid_shape
+# rather than the offical voxel_size = (point_cloud_range[3:] - point_cloud_range[:3]) / (grid_shape - 1)
 grid_shape = [480, 360, 2]
 
 # voxel_size = [0.075, 0.075, 0.2]

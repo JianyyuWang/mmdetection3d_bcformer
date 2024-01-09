@@ -78,8 +78,10 @@ class SegVFEDet(nn.Module):
             self.grid_shape = grid_shape
         elif grid_shape:
             grid_shape = torch.tensor(grid_shape, dtype=torch.float32)
-            voxel_size = (point_cloud_range[3:] - point_cloud_range[:3]) / (
-                grid_shape - 1)
+            ###################### we modify grid_shape ####################################
+            # voxel_size = (point_cloud_range[3:] - point_cloud_range[:3]) / (
+            #     grid_shape - 1)
+            voxel_size = (point_cloud_range[3:] - point_cloud_range[:3]) / grid_shape
             voxel_size = voxel_size.tolist()
             self.voxel_size = voxel_size
         else:
