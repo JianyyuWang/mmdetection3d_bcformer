@@ -150,7 +150,7 @@ class BEVFusion(Base3DDetector):
         BN, C, H, W = x.size()
         x = x.view(B, int(BN / B), C, H, W)
 
-        with torch.cuda.amp.autocast(device_type='cuda', dtype=torch.float32):
+        with torch.autocast(device_type='cuda', dtype=torch.float32):
         # with torch.cuda.amp.autocast():
             x = self.view_transform(
                 x,

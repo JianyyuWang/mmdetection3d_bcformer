@@ -1,12 +1,13 @@
 _base_ = ['../../../configs/_base_/default_runtime.py']
 
 custom_imports = dict(
-    imports=['projects.BEVFusion.bevfusion','projects.BEVFusion.data_preprocessors'], allow_failed_imports=False)
+    imports=['projects.BEVFusion.bevfusion','projects.BEVFusion.data_preprocessors','projects.BEVFusion.model.backbone'], allow_failed_imports=False)
 
-grid_shape = [480, 360, 32]
+grid_shape = [480, 360, 2]
 
 # voxel_size = [0.075, 0.075, 0.2]
 point_cloud_range = [-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]
+cylinder_point_cloud_range = [0, -3.14159265359, -5.0, 76.5, 3.14159265359, 3.0]
 class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
@@ -14,7 +15,7 @@ class_names = [
 
 metainfo = dict(classes=class_names)
 dataset_type = 'NuScenesDataset'
-data_root = 'data/nuscenes/'
+data_root = 'data/nuscenes_mini/'
 data_prefix = dict(
     pts='samples/LIDAR_TOP',
     CAM_FRONT='samples/CAM_FRONT',
@@ -39,7 +40,7 @@ model = dict(
         voxel_type='cylindrical',
         voxel_layer=dict(
             grid_shape=grid_shape,
-            point_cloud_range=point_cloud_range,
+            point_cloud_range=cylinder_point_cloud_range,  # for cylinder view
             max_num_points=-1,
             max_voxels=-1,
         ),
@@ -50,13 +51,17 @@ model = dict(
         in_channels=7,  # for nuscnenes 7 for kitti 6
         with_voxel_center=True,
         feat_compression=16,
-        return_point_feats=False),
+        return_point_feats=False,
+        point_cloud_range=cylinder_point_cloud_range),
     pts_middle_encoder=dict(
-        type='Asymm3DSpconv',
+        type='Asymm3DSpconv_detection',
         grid_size=grid_shape,  # using for sparse_shape
         input_channels=16,
         base_channels=32,
-        norm_cfg=dict(type='BN1d', eps=1e-5, momentum=0.1)),
+        zaxis_down_sampling_channels=[(32*2*2, 128), (128, 256), (256, 256), (256, 128)],
+        norm_cfg=dict(type='BN1d', eps=1e-5, momentum=0.1),
+        cyl2bev=True),
+        
     
     # need to modify
     pts_backbone=dict(
@@ -204,7 +209,7 @@ train_pipeline = [
         with_bbox_3d=True,
         with_label_3d=True,
         with_attr_label=False),
-    # dict(type='ObjectSample', db_sampler=db_sampler),
+    dict(type='ObjectSample', db_sampler=db_sampler),
     dict(
         type='GlobalRotScaleTrans',
         scale_ratio_range=[0.9, 1.1],
