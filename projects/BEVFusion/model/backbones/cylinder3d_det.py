@@ -22,7 +22,7 @@ from mmdet3d.models.layers import SparseBasicBlock, make_sparse_convmodule
 
 
 from spconv.pytorch import SparseConvTensor as spconv_SparseConvTensor
-
+from ...model.data_preprocessors.voxelize import VoxelizationByGridShapeDet
 
 
 class AsymmResBlock(BaseModule):
@@ -521,14 +521,19 @@ class Asymm3DSpconvDet(BaseModule):
                  grid_size: int,
                  input_channels: int,
                  base_channels: int = 16,
-                 zaxis_down_sampling_channels = [(16*2, 16*2), (16*2, 64), (64, 128), (128, 64)],
                  backbone_depth: int = 4,
                  height_pooing: List[bool] = [True, True, False, False],
                  norm_cfg: ConfigType = dict(
                      type='BN1d', eps=1e-3, momentum=0.01),
                  init_cfg=None,
+                 zaxis_down_sampling_channels = [(16*2, 16*2), (16*2, 64), (64, 128), (128, 64)],
+                 cyl_voxel_layer=None,
+                 cart_voxel_layer=None,
                  cyl2bev=True):
         super().__init__(init_cfg=init_cfg)
+
+        self.cyl_voxel_layer = VoxelizationByGridShapeDet(**cyl_voxel_layer)
+        self.cart_voxel_layer = VoxelizationByGridShapeDet(**cart_voxel_layer)
         self.cyl2bev = cyl2bev
         self.grid_size = grid_size
         self.backbone_depth = backbone_depth
@@ -608,15 +613,98 @@ class Asymm3DSpconvDet(BaseModule):
         #     ddcm = zaixs_down_conv(ddcm)
 
 
-        spatial_features = ddcm.dense()
+        cyl_spatial_features = ddcm.dense()
 
-        N, C, H, W, D = spatial_features.shape
-        spatial_features = spatial_features.permute(0, 1, 4, 2, 3).contiguous()  # must add .contiguous()
-        spatial_features = spatial_features.view(N, C * D, H, W)
+        N, C, H, W, D = cyl_spatial_features.shape
+        cyl_spatial_features = cyl_spatial_features.permute(0, 1, 4, 2, 3).contiguous()  # must add .contiguous()
+        cyl_spatial_features = cyl_spatial_features.view(N, C * D, H, W)
 
         # we need to convert to 2d bev feature
         if self.cyl2bev:
-            pass
+            # first we should generate cart voxel features
+            cart_H, cart_W, _ = (self.cart_voxel_layer.grid_shape).int()
+            cart_spatical_features = torch.zeros((N, cart_H, cart_W, C * D), device=cyl_spatial_features.device)
+            
+            # we need to get cart voxel coords
+            cart_H_tensor, cart_W_tensor = torch.meshgrid(torch.arange(cart_H), torch.arange(cart_W).T)
+
+            cart_H_tensor = cart_H_tensor.to(cyl_spatial_features.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, cart_H, cart_W, 1)
+            cart_W_tensor = cart_W_tensor.to(cyl_spatial_features.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, cart_H, cart_W, 1)
+
+            batch_idx = torch.arange(N).to(cyl_spatial_features.device).view(N, 1, 1, 1).expand(N, cart_H, cart_W, 1)
+            
+            cart_spatical_voxel_pos = torch.cat([batch_idx, cart_H_tensor, cart_W_tensor], dim=-1)
+
+            # get real voxel coords
+            tx, ty, _ = self.cart_voxel_layer.voxel_size
+            cart_point_cloud_range = self.cart_voxel_layer.point_cloud_range
+
+            cart_x_coords = cart_H_tensor * tx + cart_point_cloud_range[0] + tx / 2
+            cart_y_coords = cart_W_tensor * ty + cart_point_cloud_range[1] + tx / 2
+
+            # get the coorsponding real cyl coords cyl_spatical_voxel_pos
+            rho = torch.sqrt(cart_x_coords**2 + cart_y_coords**2)
+            phi = torch.atan2(cart_y_coords, cart_x_coords)
+
+            polar_res = torch.cat([rho, phi], dim=-1)
+
+            min_bound = polar_res.new_tensor(
+                self.cyl_voxel_layer.point_cloud_range[:2])
+            max_bound = polar_res.new_tensor(
+                self.cyl_voxel_layer.point_cloud_range[3:5])
+            
+            try:  # only support PyTorch >= 1.9.0
+                polar_res_clamp = torch.clamp(polar_res, min_bound,
+                                                max_bound)
+            except TypeError:
+                polar_res_clamp = polar_res.clone()
+                for coor_idx in range(2):
+                    polar_res_clamp[:, coor_idx][
+                        polar_res[:, coor_idx] >
+                        max_bound[coor_idx]] = max_bound[coor_idx]
+                    polar_res_clamp[:, coor_idx][
+                        polar_res[:, coor_idx] <
+                        min_bound[coor_idx]] = min_bound[coor_idx]
+                    
+            res_coors = torch.floor(
+                (polar_res_clamp - min_bound) / polar_res_clamp.new_tensor(
+                    self.cyl_voxel_layer.voxel_size[:2])).int()
+            
+
+            cyl_spatical_voxel_pos = torch.cat([batch_idx, res_coors], dim=-1).contiguous()
 
 
-        return spatial_features       
+            # boardcast inds，for using scatter_add
+            # each col are same inds
+            # casue inds is too large ,we should use for ...
+            cart_spatical_feature_list = []
+            for i in range(N):
+                # gt cur 
+                cur_cyl_spatical_voxel_pos = cyl_spatical_voxel_pos[i]
+                H, W, C = cur_cyl_spatical_voxel_pos.shape
+                cur_cyl_spatical_voxel_pos = cur_cyl_spatical_voxel_pos.view(H*W, C)
+
+                cur_cyl_spatial_features = cyl_spatial_features[i]
+                C, H, W = cur_cyl_spatial_features.shape
+                cur_cyl_spatial_features = cur_cyl_spatial_features.permute(1, 2, 0).view(H*W, C)
+
+                cur_cart_spatical_features = cart_spatical_features[i]
+                H, W, C = cur_cart_spatical_features.shape
+                cur_cart_spatical_features = cur_cart_spatical_features.view(H*W, C)
+
+
+                cur_index = cur_cyl_spatical_voxel_pos[:, 1] * self.cyl_voxel_layer.grid_shape[0] + cur_cyl_spatical_voxel_pos[:, 2]
+                cur_index = cur_index.unsqueeze(1).expand(-1, C).long()
+
+                cart_spatical_feature_list.append(cur_cart_spatical_features.scatter_add(0, cur_index, cur_cyl_spatial_features).view(H, W, C))
+
+            
+            
+            cart_spatical_features = torch.stack(cart_spatical_feature_list,dim=0)
+
+            return cart_spatical_features
+            
+
+
+
+        return cyl_spatial_features       

@@ -14,7 +14,7 @@ from mmdet3d.registry import MODELS
 from mmdet3d.structures import Det3DDataSample
 from mmdet3d.utils import OptConfigType, OptMultiConfig, OptSampleList
 from .ops import Voxelization
-from mmdet3d.models.data_preprocessors.voxelize import VoxelizationByGridShape
+# from ..model.data_preprocessors.voxelize import VoxelizationByGridShapeDet
 
 
 @MODELS.register_module()
@@ -36,12 +36,12 @@ class CylinderFusion(Base3DDetector):
         seg_head: Optional[dict] = None,
         **kwargs,
     ) -> None:
-        # voxelize_cfg = data_preprocessor.pop('voxelize_cfg')
+        # voxelize_cfg = data_preprocessor['voxel_layer']
         super().__init__(
             data_preprocessor=data_preprocessor, init_cfg=init_cfg)
 
         # self.voxelize_reduce = voxelize_cfg.pop('voxelize_reduce')
-        # self.pts_voxel_layer = VoxelizationByGridShape(**voxelize_cfg)
+        # self.pts_voxel_layer = VoxelizationByGridShapeDet(**voxelize_cfg)
 
         self.pts_voxel_encoder = MODELS.build(pts_voxel_encoder)
 
@@ -280,7 +280,7 @@ class CylinderFusion(Base3DDetector):
         if self.fusion_layer is not None:
             x = self.fusion_layer(features)
         else:
-            assert len(features) == 1, featuress
+            assert len(features) == 1, features
             x = features[0]
 
         x = self.pts_backbone(x)

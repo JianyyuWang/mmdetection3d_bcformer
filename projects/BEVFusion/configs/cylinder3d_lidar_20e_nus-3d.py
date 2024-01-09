@@ -32,6 +32,21 @@ input_modality = dict(use_lidar=True, use_camera=False)
 
 backend_args = None
 
+# for cylinder
+cyl_voxel_generate_layer = dict(
+    grid_shape=grid_shape,
+    point_cloud_range=cylinder_point_cloud_range,  # for cylinder view
+    max_num_points=-1,
+    max_voxels=-1,
+)
+
+cart_voxel_generate_layer = dict(
+    grid_shape=[180, 180, 1],
+    point_cloud_range=point_cloud_range,  # for cylinder view
+    max_num_points=-1,
+    max_voxels=-1,
+)
+
 model = dict(
     type='CylinderFusion',
     data_preprocessor=dict(
@@ -41,12 +56,7 @@ model = dict(
         # for voxel_config
         voxel=True,
         voxel_type='cylindrical',
-        voxel_layer=dict(
-            grid_shape=grid_shape,
-            point_cloud_range=cylinder_point_cloud_range,  # for cylinder view
-            max_num_points=-1,
-            max_voxels=-1,
-        ),
+        voxel_layer=cyl_voxel_generate_layer,
     ),
     pts_voxel_encoder=dict(
         type='SegVFEDet',
@@ -62,9 +72,12 @@ model = dict(
         grid_size=grid_shape,  # using for sparse_shape
         input_channels=16,
         base_channels=32,
-        zaxis_down_sampling_channels=[(32*2*2, 128), (128, 256), (256, 256), (256, 128)],
         norm_cfg=dict(type='BN1d', eps=1e-5, momentum=0.1),
-        cyl2bev=True),
+        zaxis_down_sampling_channels=[(32*2*2, 128), (128, 256), (256, 256), (256, 128)],
+        cyl_voxel_layer=cyl_voxel_generate_layer,
+        cart_voxel_layer=cart_voxel_generate_layer,
+        cyl2bev=True,
+        ),
         
     
     # need to modify
