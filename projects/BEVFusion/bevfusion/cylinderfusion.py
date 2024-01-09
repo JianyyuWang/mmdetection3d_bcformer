@@ -152,7 +152,6 @@ class CylinderFusion(Base3DDetector):
         x = x.view(B, int(BN / B), C, H, W)
 
         with torch.autocast(device_type='cuda', dtype=torch.float32):
-        # with torch.cuda.amp.autocast():
             x = self.view_transform(
                 x,
                 points,
@@ -167,7 +166,7 @@ class CylinderFusion(Base3DDetector):
 
     def extract_pts_feat(self, batch_inputs_dict) -> torch.Tensor:
         # points = batch_inputs_dict['points']
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.autocast(device_type='cuda',enabled=False):
             encoded_feats = self.pts_voxel_encoder(batch_inputs_dict['voxels']['voxels'],
                                             batch_inputs_dict['voxels']['coors'])
         batch_inputs_dict['voxels']['voxel_coors'] = encoded_feats[1]
@@ -281,7 +280,7 @@ class CylinderFusion(Base3DDetector):
         if self.fusion_layer is not None:
             x = self.fusion_layer(features)
         else:
-            assert len(features) == 1, features
+            assert len(features) == 1, featuress
             x = features[0]
 
         x = self.pts_backbone(x)

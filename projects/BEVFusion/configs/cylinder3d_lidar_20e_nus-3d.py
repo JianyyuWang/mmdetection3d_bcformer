@@ -1,7 +1,7 @@
 _base_ = ['../../../configs/_base_/default_runtime.py']
 
 custom_imports = dict(
-    imports=['projects.BEVFusion.bevfusion','projects.BEVFusion.data_preprocessors','projects.BEVFusion.model.backbone'], allow_failed_imports=False)
+    imports=['projects.BEVFusion.bevfusion','projects.BEVFusion.model'], allow_failed_imports=False)
 
 grid_shape = [480, 360, 2]
 
@@ -46,15 +46,16 @@ model = dict(
         ),
     ),
     pts_voxel_encoder=dict(
-        type='SegVFE',
+        type='SegVFEDet',
         feat_channels=[64, 128, 256, 256],
+        grid_shape=grid_shape,
         in_channels=7,  # for nuscnenes 7 for kitti 6
         with_voxel_center=True,
         feat_compression=16,
         return_point_feats=False,
         point_cloud_range=cylinder_point_cloud_range),
     pts_middle_encoder=dict(
-        type='Asymm3DSpconv_detection',
+        type='Asymm3DSpconvDet',
         grid_size=grid_shape,  # using for sparse_shape
         input_channels=16,
         base_channels=32,

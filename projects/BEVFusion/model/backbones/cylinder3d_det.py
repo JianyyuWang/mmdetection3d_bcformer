@@ -499,7 +499,7 @@ class AsymmeZaxisDownBlock(BaseModule):
 
 
 @MODELS.register_module()
-class Asymm3DSpconv_detection(BaseModule):
+class Asymm3DSpconvDet(BaseModule):
     """Asymmetrical 3D convolution networks.
 
     Args:
