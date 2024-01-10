@@ -621,10 +621,7 @@ class Asymm3DSpconvDet(BaseModule):
 
         # we need to convert to 2d bev feature
         if self.cyl2bev:
-            # first we should generate cart voxel features
             cart_H, cart_W, _ = (self.cart_voxel_layer.grid_shape).int()
-            cart_spatical_features = torch.zeros((N, cart_H, cart_W, C * D), device=cyl_spatial_features.device)
-            
             # we need to get cart voxel coords
             cart_H_tensor, cart_W_tensor = torch.meshgrid(torch.arange(cart_H), torch.arange(cart_W).T)
 
@@ -633,7 +630,7 @@ class Asymm3DSpconvDet(BaseModule):
 
             batch_idx = torch.arange(N).to(cyl_spatial_features.device).view(N, 1, 1, 1).expand(N, cart_H, cart_W, 1)
             
-            cart_spatical_voxel_pos = torch.cat([batch_idx, cart_H_tensor, cart_W_tensor], dim=-1)
+            # voxel_spatical_cart_pos = torch.cat([batch_idx, cart_H_tensor, cart_W_tensor], dim=-1)
 
             # get real voxel coords
             tx, ty, _ = self.cart_voxel_layer.voxel_size
@@ -671,40 +668,40 @@ class Asymm3DSpconvDet(BaseModule):
                     self.cyl_voxel_layer.voxel_size[:2])).int()
             
 
-            cyl_spatical_voxel_pos = torch.cat([batch_idx, res_coors], dim=-1).contiguous()
-
+            voxel_spatical_cyl_pos = torch.cat([batch_idx, res_coors], dim=-1).contiguous()
 
             # boardcast inds，for using scatter_add
             # each col are same inds
             # casue inds is too large ,we should use for ...
             cart_spatical_feature_list = []
             for i in range(N):
+                # first we should generate cart voxel features
+                
+                # cur_cart_spatical_features = torch.zeros((cart_H, cart_W, C * D), device=cyl_spatial_features.device).view(cart_H*cart_W, C * D)
+
                 # gt cur 
-                cur_cyl_spatical_voxel_pos = cyl_spatical_voxel_pos[i]
-                H, W, C = cur_cyl_spatical_voxel_pos.shape
-                cur_cyl_spatical_voxel_pos = cur_cyl_spatical_voxel_pos.view(H*W, C)
+                cur_voxel_spatical_cyl_pos = voxel_spatical_cyl_pos[i]
+                H, W, C = cur_voxel_spatical_cyl_pos.shape
+                cur_voxel_spatical_cyl_pos = cur_voxel_spatical_cyl_pos.view(H*W, C)
 
                 cur_cyl_spatial_features = cyl_spatial_features[i]
                 C, H, W = cur_cyl_spatial_features.shape
                 cur_cyl_spatial_features = cur_cyl_spatial_features.permute(1, 2, 0).view(H*W, C)
 
-                cur_cart_spatical_features = cart_spatical_features[i]
-                H, W, C = cur_cart_spatical_features.shape
-                cur_cart_spatical_features = cur_cart_spatical_features.view(H*W, C)
+                cur_index = cur_voxel_spatical_cyl_pos[:, 1] * self.cyl_voxel_layer.grid_shape[1] + cur_voxel_spatical_cyl_pos[:, 2]
 
+                # [cart_H*cart_W, C] -> [cart_H, cart_W, C] -> [C, cart_H, cart_W]
+                cart_spatical_feature_list.append(cur_cyl_spatial_features[cur_index.long()].view(cart_H, cart_W, C).permute(2, 0, 1))
 
-                cur_index = cur_cyl_spatical_voxel_pos[:, 1] * self.cyl_voxel_layer.grid_shape[0] + cur_cyl_spatical_voxel_pos[:, 2]
-                cur_index = cur_index.unsqueeze(1).expand(-1, C).long()
-
-                cart_spatical_feature_list.append(cur_cart_spatical_features.scatter_add(0, cur_index, cur_cyl_spatial_features).view(H, W, C))
-
+                ######################## error should reference SparseKD ########################
+                # here We don't need to use scatter_add
+                # cur_index = cur_index.unsqueeze(1).expand(-1, C).long()
+                # cart_spatical_feature_list.append(cur_cart_spatical_features.scatter_add(0, cur_index, cur_cyl_spatial_features).view(H, W, C))
             
-            
-            cart_spatical_features = torch.stack(cart_spatical_feature_list,dim=0)
+            cart_spatical_features = torch.stack(cart_spatical_feature_list,dim=0).contiguous()
 
             return cart_spatical_features
             
+        else:
 
-
-
-        return cyl_spatial_features       
+            return cyl_spatial_features       
